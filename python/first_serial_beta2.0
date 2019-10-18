@@ -1,0 +1,126 @@
+# -*- coding: utf-8 -*-
+"""
+
+Beta 2.0
+
+Want to add for this version:
+    Better COM-port control. Updating create_serial function
+    Saving files to excel instead of csv
+
+Added to this version:
+
+
+
+
+Created on Mon Oct 14 10:00:49 2019
+
+@author: jikaxa
+"""
+#!/usr/bin/python
+import serial
+import time
+import csv
+import serial.tools.list_ports
+
+import os
+
+
+#===============Settings==================#
+
+portname = 'COM3'   # Name of the serial port
+baudrate = 9600     # The baudrate. Use same as sent from Arduino
+timeout = 2         # Waiting time for opening the serial. (seconds)
+
+#===============Initialize================#
+
+meas = True
+
+#===============Functions================#
+
+def measure(answer):
+    measure = ''
+    
+    while measure != 'y' or measure != 'n':
+         
+        measure = input('\n\n\tDo you wanna go again? y/n: ');
+    
+        if measure == 'y':
+            answer = True
+            break
+        elif measure == 'n':     
+            answer = False
+            break
+        else:
+            print('\tYou have to choose y or n..')
+            
+    return answer
+
+def create_serial(port,baudrate,timet):
+    
+    #ser = serial.Serial(port,baudrate,timeout = timet)
+    port = serial.tools.list_ports.comports()
+    
+    
+    
+    for i in port: 
+        print(i)
+    
+    #print(ser.bytesize)
+    
+    return None
+  
+def read_serial_data(serial,datatime,filename):
+    
+    serial.flushInput()
+    millis2 = 0
+    millis = time.time() # Start timer for timestamps
+    #for i in range(0,datapoints): 
+    while millis2 < datatime:
+        ser_bytes = ser.readline()
+        decoded_bytes = ser_bytes[0:len(ser_bytes)-2].decode("utf-8")
+        millis2 = float(round((time.time() - millis),2))
+        print('\t\t' + decoded_bytes + ',' + str(millis2))
+        save_to_csv(ser_bytes, filename, millis2)
+    
+    
+def save_to_csv(data, filename, time):
+    
+    with open(filename + ".csv","a+",newline='') as f:
+        decoded_bytes = data[0:len(data)-2].decode("utf-8")
+        writer = csv.writer(f,delimiter=',',quotechar='|',dialect='excel')
+        writer.writerow([time,decoded_bytes])
+
+#==========Main=========================#
+
+
+create_serial(portname,baudrate,timeout)
+
+
+
+
+#while True:
+#    
+#    while meas:
+#        
+#        clear = lambda: os.system('cls') #Clears the screen
+#        clear()
+#        
+#        print('\n\n\t### Welcome to Maskinmätaren ###')
+#        print('\n\n\t Connecting to COM-port... ')
+#        ser = create_serial(portname,baudrate,timeout)
+#        print('\t COM port found:  ' + portname)
+#        print('\n\t Starting to read serial data... ')
+#        filename = input('\t Choose name for your csv-file:')
+#        data_time = float(input('\t How long measurement do you wanna do? (seconds): '))
+#        
+#        read_serial_data(ser,data_time,filename)
+#        
+#        
+#        ser.close()
+#        print('\n\t Your data was saved in:  ' + filename + '.csv ')
+#        meas = measure(meas)
+#        
+#        if meas == False:
+#            exit()
+
+            
