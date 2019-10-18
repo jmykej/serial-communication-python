@@ -1,4 +1,7 @@
-# -*- coding: utf-8 -*-
+# Beta 1.0 #
+# First version. Asks to name .csv-file and time to make the measurement
+# Also Ask if you wanna go again. Terminal version.
+# No plot.
 """
 Created on Mon Oct 14 10:00:49 2019
 
@@ -59,20 +62,26 @@ def create_serial(port,baudrate,timet):
     
     return serial.Serial(port,baudrate,timeout = timet)
   
-def read_serial_data(serial,datatime):
+def read_serial_data(serial,datatime,filename):
     
     serial.flushInput()
     millis2 = 0
     millis = time.time() # Start timer for timestamps
     #for i in range(0,datapoints): 
-    while float(millis2) < datatime:
+    while millis2 < datatime:
         ser_bytes = ser.readline()
         decoded_bytes = ser_bytes[0:len(ser_bytes)-2].decode("utf-8")
-        millis2 = str(round((time.time() - millis),2))
-        print('\t\t' + decoded_bytes + ',' + millis2)
-            
-def save_to_csv():
-    None
+        millis2 = float(round((time.time() - millis),2))
+        print('\t\t' + decoded_bytes + ',' + str(millis2))
+        save_to_csv(ser_bytes, filename, millis2)
+    
+    
+def save_to_csv(data, filename, time):
+    
+    with open(filename + ".csv","a+",newline='') as f:
+        decoded_bytes = data[0:len(data)-2].decode("utf-8")
+        writer = csv.writer(f,delimiter=',',quotechar='|',dialect='excel')
+        writer.writerow([time,decoded_bytes])
 
 #==========Main=========================#
 
@@ -91,7 +100,10 @@ while True:
         print('\n\t Starting to read serial data... ')
         filename = input('\t Choose name for your csv-file:')
         data_time = float(input('\t How long measurement do you wanna do? (seconds): '))
-        read_serial_data(ser,data_time)
+        
+        read_serial_data(ser,data_time,filename)
+        
+        
         ser.close()
         print('\n\t Your data was saved in:  ' + filename + '.csv ')
         meas = measure(meas)
@@ -99,25 +111,4 @@ while True:
         if meas == False:
             exit()
 
-#ser_bytes = ser.readline()
-
-
-
-#while True:
-#    
-#    try:
-#        
-#            ser_bytes = ser.readline()
-#            decoded_bytes = ser_bytes[0:len(ser_bytes)-2].decode("utf-8")
-#            millis2 = float((int(round(time.time()*1000)) - millis)/1000)
-#            print(decoded_bytes)
-#            with open(file_name + ".csv","a+",newline='') as f:
-#                writer = csv.writer(f,delimiter=',',quotechar='|')
-#                writer.writerow([millis2,decoded_bytes])
-#
-#    except:
-#        ser.close()
-#        print("Keyboard Interrupt")
-#        break 
-            
-            
+       
