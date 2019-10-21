@@ -1,6 +1,4 @@
-# -*- coding: utf-8 -*-
 """
-
 Beta 2.0
 
 Want to add for this version:
@@ -9,28 +7,34 @@ Want to add for this version:
 
 Added to this version:
 
-
-
+    Saving and plotting in a excel-file.
+    Checking COM-ports and looking for one named Arduino
 
 Created on Mon Oct 14 10:00:49 2019
 
 @author: jikaxa
 """
+#==========Imports========================#
+
 #!/usr/bin/python
 import serial
 import time
-import csv
 import serial.tools.list_ports
-
 import os
-
+from openpyxl import Workbook
+from openpyxl.chart import (
+    LineChart,
+    Reference,
+)
 
 #===============Settings==================#
 
-portname = 'COM3'   # Name of the serial port
+portname = 'COM3'   # Name of the serial port. It looks for a port with an Arudino first hand.
 baudrate = 9600     # The baudrate. Use same as sent from Arduino
 timeout = 2         # Waiting time for opening the serial. (seconds)
-
+wb = Workbook()     # Creat xl-file
+ws = wb.active      #grab the active worksheet
+    
 #===============Initialize================#
 
 meas = True
@@ -55,22 +59,53 @@ def measure(answer):
             
     return answer
 
-def create_serial(port,baudrate,timet):
+def creat_xl_graph(filename, b):
     
-    #ser = serial.Serial(port,baudrate,timeout = timet)
+     #Name two columns
+    ws['A1'] = 'Weight(KG)'
+    ws['B1'] = 'Time(Seconds)'
+    ws.column_dimensions['A'].width = 15
+    ws.column_dimensions['B'].width = 15
+    
+    c1 = LineChart()
+    c1.title = "Mätmaskinen"
+    c1.style = 13
+    c1.y_axis.title = 'Weight(kg)'
+    c1.x_axis.title = 'Time(s)'
+    c1.y_axis.scaling.min = 0
+    c1.y_axis.scaling.max = 5
+    c1.height = 20
+    c1.width = 40
+    #save_to_xl(a,b)
+    # Save the file
+    data = Reference(ws, min_col=1, min_row=2, max_col=1, max_row=len(b))
+    c1.add_data(data, titles_from_data=True)
+    times = Reference(ws, min_col=2, min_row=2, max_col=2, max_row=len(b))
+    c1.set_categories(times)
+    ws.add_chart(c1, "F10")
+    wb.save(filename + ".xlsx")
+
+def create_serial(portname,baudrate,timet):
+    
     port = serial.tools.list_ports.comports()
-    
-    
+    print('\n\t\t Ports found: \n')
+    print('\t\t #####################\n')
     
     for i in port: 
-        print(i)
-    
-    #print(ser.bytesize)
-    
-    return None
+        print('\t\t ' + str(i))
+        a = str(i)
+        if 'Arduino' in a:
+            port2 = str(a[0:4])
+    print('\n\t\t #####################')       
+    print('\n\t\t Connected to: ' + (port2))
+    print('\n\t\t #####################\n') 
+          
+    return serial.Serial(port2,baudrate,timeout=timet)
   
 def read_serial_data(serial,datatime,filename):
     
+    a = []
+    b = []
     serial.flushInput()
     millis2 = 0
     millis = time.time() # Start timer for timestamps
@@ -78,49 +113,50 @@ def read_serial_data(serial,datatime,filename):
     while millis2 < datatime:
         ser_bytes = ser.readline()
         decoded_bytes = ser_bytes[0:len(ser_bytes)-2].decode("utf-8")
-        millis2 = float(round((time.time() - millis),2))
+        a.append(float(decoded_bytes))
+        millis2 = float(round((time.time() - millis),3))
+        a.append(millis2)
+        b.append(millis2)
+        ws.append(a)
+        del a[:]
         print('\t\t' + decoded_bytes + ',' + str(millis2))
-        save_to_csv(ser_bytes, filename, millis2)
+    return b
     
     
-def save_to_csv(data, filename, time):
-    
-    with open(filename + ".csv","a+",newline='') as f:
-        decoded_bytes = data[0:len(data)-2].decode("utf-8")
-        writer = csv.writer(f,delimiter=',',quotechar='|',dialect='excel')
-        writer.writerow([time,decoded_bytes])
+
 
 #==========Main=========================#
 
 
-create_serial(portname,baudrate,timeout)
+#a = create_serial(portname,baudrate,timeout)
+#
+#a.close()
 
-
-
-
-#while True:
-#    
-#    while meas:
-#        
-#        clear = lambda: os.system('cls') #Clears the screen
-#        clear()
-#        
-#        print('\n\n\t### Welcome to Maskinmätaren ###')
-#        print('\n\n\t Connecting to COM-port... ')
-#        ser = create_serial(portname,baudrate,timeout)
-#        print('\t COM port found:  ' + portname)
-#        print('\n\t Starting to read serial data... ')
-#        filename = input('\t Choose name for your csv-file:')
-#        data_time = float(input('\t How long measurement do you wanna do? (seconds): '))
-#        
-#        read_serial_data(ser,data_time,filename)
-#        
-#        
-#        ser.close()
-#        print('\n\t Your data was saved in:  ' + filename + '.csv ')
-#        meas = measure(meas)
-#        
-#        if meas == False:
-#            exit()
+while True:
+    
+    while meas:
+        
+        clear = lambda: os.system('cls') #Clears the screen
+        clear()
+        
+        print('\n\n\t########### Welcome to Maskinmätaren ###########')
+        print('\n\t\tYou will choose a name for your excel-file.')
+        print('\t\tAnd the you will choose for how long your\n\t\tmeasurement is gonna be.')
+        print('\t\tYou can press Ctrl-c if you wanna exit the program.')
+        ser = create_serial(portname,baudrate,timeout)
+        print('\n\t\t Starting to read serial data... ')
+        filename = input('\t\t Choose name for your excel-file:')
+        data_time = float(input('\t\t How long measurement do you wanna do? (seconds): '))
+        
+        b = read_serial_data(ser,data_time,filename)
+        
+        
+        ser.close()
+        creat_xl_graph(filename, b)
+        print('\n\t\t Your data was saved in:  ' + filename)
+        meas = measure(meas)
+        
+        if meas == False:
+            exit()
 
             
