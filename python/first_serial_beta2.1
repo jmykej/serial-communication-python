@@ -1,0 +1,174 @@
+"""
+Beta 2.1
+
+Want to add for this version:
+    Adding different sheets for one file.
+
+Added to this version:
+
+    Added more sheets to same xl-file
+    Also fixed bug with float-conversion in read_serial
+
+Created on Mon Oct 14 10:00:49 2019
+
+@author: jikaxa
+"""
+#==========Imports========================#
+
+#!/usr/bin/python
+import serial
+import time
+import serial.tools.list_ports
+import os
+from openpyxl import Workbook
+from openpyxl.chart import (
+    LineChart,
+    Reference,
+)
+
+#===============Settings==================#
+
+portname = 'COM3'   # Name of the serial port. It looks for a port with an Arudino first hand.
+baudrate = 9600     # The baudrate. Use same as sent from Arduino
+timeout = 2         # Waiting time for opening the serial. (seconds)
+wb = Workbook()     # Creat xl-file
+ws = wb.active      #grab the active worksheet
+graph_number = ['a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','x','y','z']
+measurements = 0    
+#===============Initialize================#
+
+meas = True
+
+#===============Functions================#
+
+def measure(answer):
+    measure = ''
+    
+    while measure != 'y' or measure != 'n':
+         
+        measure = input('\n\n\tDo you wanna go again? y/n: ');
+    
+        if measure == 'y':
+            answer = True
+            break
+        elif measure == 'n':     
+            answer = False
+            break
+        else:
+            print('\tYou have to choose y or n..')
+            
+    return answer
+
+def add_sheet():
+    None
+
+def creat_xl_graph(filename, excercise_ws, b, c1):
+    
+     #Name two columns
+    excercise_ws['A1'] = 'Weight(KG)'
+    excercise_ws['B1'] = 'Time(Seconds)'
+    excercise_ws.column_dimensions['A'].width = 15
+    excercise_ws.column_dimensions['B'].width = 15
+    
+    c1 = LineChart()
+    c1.title = "Mätmaskinen"
+    c1.style = 13
+    c1.y_axis.title = 'Weight(kg)'
+    c1.x_axis.title = 'Time(s)'
+    c1.y_axis.scaling.min = 0
+    c1.y_axis.scaling.max = 5
+    c1.height = 20
+    c1.width = 40
+    data = Reference(excercise_ws, min_col=1, min_row=2, max_col=1, max_row=len(b))
+    c1.add_data(data, titles_from_data=True)
+    times = Reference(excercise_ws, min_col=2, min_row=2, max_col=2, max_row=len(b))
+    c1.set_categories(times)
+    excercise_ws.add_chart(c1, "F10")
+    wb.save(filename + ".xlsx")
+
+def create_serial(portname,baudrate,timet):
+    
+    port = serial.tools.list_ports.comports()
+    print('\n\t\t Ports found: \n')
+    print('\t\t #####################\n')
+    
+    for i in port: 
+        print('\t\t ' + str(i))
+        a = str(i)
+        if 'Arduino' in a:
+            port2 = str(a[0:4])
+    print('\n\t\t #####################')       
+    print('\n\t\t Connected to: ' + (port2))
+    print('\n\t\t #####################\n') 
+          
+    return serial.Serial(port2,baudrate,timeout=timet)
+  
+def read_serial_data(serial,datatime,excercise):
+    
+    a = []
+    b = []
+    serial.flushInput()
+    millis2 = 0
+    millis = time.time() # Start timer for timestamps
+    #for i in range(0,datapoints): 
+    while millis2 < datatime:
+        ser_bytes = ser.readline()
+        decoded_bytes = ser_bytes[0:len(ser_bytes)-2].decode("utf-8")
+        if '.' not in decoded_bytes:
+            continue
+        else:
+            a.append(float(decoded_bytes))
+            millis2 = float(round((time.time() - millis),3))
+            a.append(millis2)
+            b.append(millis2)
+            excercise.append(a)
+            del a[:]
+            print('\t\t' + decoded_bytes + ',' + str(millis2))
+        
+    return b
+    
+
+#==========Main=========================#
+
+
+while True:
+        
+    clear = lambda: os.system('cls') #Clears the screen
+    clear()
+        
+    print('\n\n\t########### Welcome to Maskinmätaren ###########')
+    print('\n\t\tYou will choose a name for your excel-file.')
+    print('\t\tAnd the you will choose for how long your\n\t\tmeasurement is gonna be.')
+    print('\t\tYou can press Ctrl-c if you wanna exit the program.')
+    ser = create_serial(portname,baudrate,timeout)
+    print('\n\t\t Starting to read serial data... ')
+    filename = input('\t\t Choose name for your excel-file:')
+    excercise_name = input('\t\t Name your excercise: ')
+    ws.title = excercise_name
+    data_time = float(input('\t\t How long measurement do you wanna do? (seconds): '))
+    
+    b = read_serial_data(ser,data_time,ws)
+        
+        
+    
+    creat_xl_graph(filename,ws, b, graph_number[measurements])
+    measurements + 1
+    print('\n\t\t Your data was saved in:  ' + filename)
+    meas = measure(meas)
+    
+    while meas:
+        excercise_name = input('\t Name your excercise: ')
+        excercise = wb.create_sheet(excercise_name)
+        data_time = float(input('\t\t How long measurement do you wanna do? (seconds): '))
+        b = read_serial_data(ser,data_time,excercise)
+        #ser.close()
+        creat_xl_graph(filename, excercise, b, graph_number[measurements])
+        measurements + 1
+        print('\n\t\t Your data was saved in:  ' + filename)
+        meas = measure(meas)
+        
+    if meas == False:
+        ser.close()
+        exit()
+
+            
