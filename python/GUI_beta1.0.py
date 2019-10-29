@@ -1,191 +1,164 @@
-"""
-Beta 2.1
+from tkinter import *
 
-Want to add for this version:
-    Adding different sheets for one file.
-
-Added to this version:
-
-    Added more sheets to same xl-file
-    Also fixed bug with float-conversion in read_serial
-
-Created on Mon Oct 14 10:00:49 2019
-
-@author: jikaxa
-"""
-#==========Imports========================#
-
-#!/usr/bin/python
+import serial
+import threading
+import time
+import csv
 import serial                   #Module to read serial port
-from serial import Serial
 import time                     #Module for the timing
 import serial.tools.list_ports  #Module to check for ports
-import os                       #Module to clear screen in terminal
-from openpyxl import Workbook   #Modules for the Excel-files
-from openpyxl.chart import (
-    LineChart,
-    Reference,
-)
+import os
 
-#===============Settings==================#
-
-portname = 'COM3'   # Name of the serial port.
-baudrate = 9600     # The baudrate. 
-timeout = 2         # Waiting time for opening the serial. (Seconds)
-wb = Workbook()     # Create xl-file
-ws = wb.active      # Grab the active worksheet
-
-#===============Initialize================#
-
-keep_measuring = True # Bool to keep program run for more measurements
-
-#===============Functions================#
-
-def measure(answer):
-    #A function to set the variable keep_measuring to true or false after every measurement
-
-    meas_ans = ''
-    
-    while meas_ans != 'y' or meas_ans != 'n':
-         
-        meas_ans = input('\n\n\tDo you wanna go again? y/n: ')
-    
-        if meas_ans == 'y':
-            answer = True
-            break
-        elif meas_ans == 'n':     
-            answer = False
-            break
-        else:
-            print('\tYou have to choose y or n..')
-            
-    return answer
-
-def creat_xl_graph(filename, excercise_ws, datapoint_amount):
-
-    #Creates a sheet in the Excel-file for every measurement.
-    #Takes in "filename" for the name of the Excel-file choosen by the user
-    #Takes in "excercise_ws" to create a new sheet for every new measurement
-    #Takes in "datapoints_ amount" to know how many datapoints were collected. Used when making the graph 
-        
-    excercise_ws['A1'] = 'Weight(KG)'               #Names first column
-    excercise_ws['B1'] = 'Time(Seconds)'            #Names second column
-    excercise_ws.column_dimensions['A'].width = 15  #Sets the width of first column
-    excercise_ws.column_dimensions['B'].width = 15  #Sets the width of second column
-    
-    c1 = LineChart()                                #Creates a line chart
-    c1.title = "Mätmaskinen"                        
-    c1.style = 13
-    c1.y_axis.title = 'Weight(kg)'
-    c1.x_axis.title = 'Time(s)'
-    c1.y_axis.scaling.min = 0                       #Sets minimum scale
-    c1.y_axis.scaling.max = 5                       #Sets maximum scale
-    c1.height = 20                                  #Sets height of graph
-    c1.width = 40                                   #Sets width of graph
-    data = Reference(excercise_ws, min_col=1, min_row=2, max_col=1, max_row=len(datapoint_amount))      #Decides from which column to collect data for y-axis in graph
-    c1.add_data(data, titles_from_data=True)                                                            #Adds above data
-    times = Reference(excercise_ws, min_col=2, min_row=2, max_col=2, max_row=len(datapoint_amount))     #Decides from which column to collect data for x-axis in graph
-    c1.set_categories(times)                                                                            #Adds above data
-    excercise_ws.add_chart(c1, "F10")                                                                   #Adds chart to sheet at position "F10".
-    wb.save(filename + ".xlsx")                                                                         #Saves the sheet in choosen file.
-
-def create_serial(portname, baudrate, timet):
-
-    #Creates a connection to a COM-port. 
-    #Lists all the connected units and looks for one named Arduino
-    #Returns an COM-port object.
-    
-    port = serial.tools.list_ports.comports()       #Lists all connected ports
-    print('\n\t\t Ports found: \n')
-    print('\t\t #####################\n')
-    
-    for i in port:                                  #Looks for a unit named Arduino that it can connect to.
-        print('\t\t ' + str(i))
-        a = str(i)
-        if 'Arduino' in a:
-            port2 = str(a[0:4])
-    print('\n\t\t #####################')       
-    print('\n\t\t Connected to: ' + (port2))
-    print('\n\t\t #####################\n') 
-          
-    return serial.Serial(port2, baudrate, timeout=timet)
-  
-def read_serial_data(serial, datatime, excercise):
-
-    #Function to read the serial data and decode it for the Excel-file
-    
-    data_holder = []                    #List to put data through one iteration
-    datapoint_amount = []               #List thats used to see how many datapoints is saved. Used when creating the graphs later. (Change to use an int in the future)
-    serial.flushInput()                 #Cleans the serial input.
-    millis2 = 0                 
-    millis = time.time()                #Start timer for timestamps
-    
-    while millis2 < datatime:                                                 #Runs measurement loop for the amount of time choosen by the user.
-        ser_bytes = ser.readline()                                            #Reads one line on the serial bus
-        millis2 = float(round((time.time() - millis), 3))                     #Calculate the time when the measurement is made.
-        decoded_bytes = ser_bytes[0:len(ser_bytes)-2].decode("utf-8")         #Decodes the serial data to a string
-        if '.' not in decoded_bytes:                                          #An if-statement to avoid reading faulty data and then interupting the program. (Can be improved maybe.)
-            continue
-        else:
-            data_holder.append(float(decoded_bytes))                          #Add the decoded data to a list
-            data_holder.append(millis2)                                       #Add the timestamp from the measurement to the same list as above.
-            datapoint_amount.append(millis2)                                  #Add timestamp to this list just to know how many datapoints is saved.
-            excercise.append(data_holder)                                     #Add the datapoint and timestamp from the dataholder to the Excel sheet.
-            del data_holder[:]                                                #Empty the data holder. This is done because the excel module saved the data in rows and not columns otherwise
-            print('\t\t' + decoded_bytes + ',' + str(millis2))
-        
-    return datapoint_amount
-    
-
-#==========Main=========================#
+PROGRAM_NAME = "Serial Data Logger"
 
 
-while True:
-        
-    clear = lambda: os.system('cls') #Clears the screen. At least on windows computer
-    clear()
-    
-    ##Welcome text. Tells you a little bit about the program.
+class DataLogger():
+	live_label_running = True
+	text_content = []
 
-    print('\n\n\t########### Welcome to Maskinmätaren ###########')
-    print('\n\t\tYou will choose a name for your excel-file.')
-    print('\t\tAnd the you will choose for how long your\n\t\tmeasurement is gonna be.')
-    print('\t\tYou can press Ctrl-c if you wanna exit the program.')
+	def __init__(self, root):
 
-    ##Opens the serial port
+		self.root = root
+		self.root.title(PROGRAM_NAME)
+		self.init_gui()
 
-    ser = create_serial(portname, baudrate, timeout)
-    print('\n\t\t Starting to read serial data... ')
+## Create a frame
 
-    ##Takes some input. Names the excel-file and the first sheet aka excercise.
+	def frame_creation(self):
+		self.left_frame = Frame(root, bd=2, relief=SUNKEN)
+		self.left_frame.pack(side=LEFT, expand=False, fill=Y)
+		self.bottom_frame = Frame(root, bd=2, relief=SUNKEN)
+		self.bottom_frame.pack(side=BOTTOM, expand=False, fill=X)
+		self.right_frame = Frame(root, bd=2, relief=SUNKEN)
+		self.right_frame.pack(side=RIGHT, expand=True, fill="both")
 
-    filename = input('\t\t Choose name for your excel-file:')
-    excercise_name = input('\t\t Name your excercise: ')
-    ws.title = excercise_name
+## Create the text widget
 
-    ##Takes the input for how long the first measurement will be.
+	def text_widget(self):
 
-    data_time = float(input('\t\t How long measurement do you wanna do? (seconds): '))
-    
-    datapoint_amount = read_serial_data(ser, data_time, ws)
-        
-    creat_xl_graph(filename, ws, datapoint_amount)
-    print('\n\t\t Your data was saved in:  ' + filename)
-    keep_measuring = measure(keep_measuring)
-    
-    #Runs the program for as many times you want it. And save each measurement in a new sheet of the Excel-file.
+		self.live_text = Text(self.right_frame, height=15, width=40)
+		self.live_text.pack(side=LEFT, expand=True, fill="both", padx=5)
 
-    while keep_measuring:
-        excercise_name = input('\t Name your excercise: ')
-        excercise = wb.create_sheet(excercise_name)
-        data_time = float(input('\t\t How long measurement do you wanna do? (seconds): '))
-        datapoint_amount = read_serial_data(ser, data_time, excercise)
-        creat_xl_graph(filename, excercise, datapoint_amount)
-        print('\n\t\t Your data was saved in:  ' + filename)
-        keep_measuring = measure(keep_measuring)
-       
-    #Closes the COM-port and exits the program when you are done.   
+## Main method for streaming and saving data
 
-    if keep_measuring == False:
-        ser.close()
-        exit()
+	def get_data(self):
+		filename = self.file_entry.get()+".csv"
+		#See if file is not blank
+		if filename != ".csv":
+			#Try given serial port
+			try:
+				#declaring the variable method
+				ser = serial.Serial(self.com_entry.get(), 9600, timeout=1)
+				ser_bytes = ser.readline()
+				decoded_bytes = str(ser_bytes[0:len(ser_bytes)-2].decode("utf-8"))
+				data = decoded_bytes
+				feilds = []
+				i = 0
+				headers = ""
+
+				## this is to get the number of variables, so that you can use any number of variables
+				for x in data:
+					feilds.append("Variable " + str(i))
+					i += 1
+				## save the header to the csv file. You can change these later in the spreadsheet
+				with open(filename, 'w') as csvfile:
+					csvwriter = csv.writer(csvfile, lineterminator='\n')
+					csvwriter.writerow(feilds)
+					for pos in feilds:
+						headers = headers + str(pos)
+				## Loop to get the data and save it to a csv file, the post to the text box.
+				while True:
+					try:
+						ser_bytes = ser.readline()
+						decoded_bytes = str(ser_bytes[0:len(ser_bytes)-2].decode("utf-8"))
+						data = decoded_bytes
+						with open(filename, 'a') as csvfile:
+							csvwriter = csv.writer(csvfile, lineterminator="\n")
+							csvwriter.writerow([data])
+							print("Data has been logged")
+
+						self.live_text.insert(END, str(data) + "\n")
+						self.live_text.see("end")
+
+						if DataLogger.live_label_running == False:
+							break
+					## This is where if anythin went wrong with the data
+					except:
+						print("Something is wrong")
+						break
+			## If the serial port did not work it will jump here
+			except:
+				self.live_text.insert(END, "[ERROR] COM PORT NOT FOUND"+"\n")
+				DataLogger.live_label_running = False
+				self.toggle_start()
+
+	## This is where the if statement at the top if the method will return to if the filename is empty
+		else:
+			self.live_text.insert(END, "[ERROR] PLEASE NAME FILE" + "\n")
+			DataLogger.live_label_running = False
+			self.toggle_start()
+
+	#Thread to get the data in so as no to disturb the main loop
+	def get_data_thread(self):
+		self.thread2 = threading.Thread(target=self.get_data, name="Getting Data")
+		self.thread2.daemon = False
+		self.thread2.start()
+	#Thread to start the get data thread
+	def start_data(self):
+		DataLogger.live_label_running = True
+		self.get_data_thread()
+		self.toggle_start()
+	#Method to pause the get data thread, will clear output window
+	def pause_data(self):
+		DataLogger.live_label_running = False
+		self.toggle_start()
+	#Method to stop the get data thread, will clear window
+	def stop_data(self):
+		DataLogger.live_label_running = False
+		self.live_text.delete(1.0, END)
+		self.toggle_start()
+	#Method to see if the start button should be disabled or not.
+	def toggle_start(self):
+		if DataLogger.live_label_running == True:
+			self.start_button.configure(state="disabled")
+		else:
+			self.start_button.configure(state="normal")
+	#Method starts widget on the left side, in the left frame.
+	def left_widgets(self):
+		file_label = Label(self.left_frame, text="File: ").grid(row=0, column=0)
+		self.file_entry = Entry(self.left_frame)
+		self.file_entry.grid(row=1, column=0)
+
+		COM_label = Label(self.left_frame, text='COM Port:').grid(row=2, column=0)
+		self.com_entry = Entry(self.left_frame)
+		self.com_entry.grid(row=3, column=0)
+		self.com_entry.insert(0, "COM3")
+
+		Split_label = Label(self.left_frame, text='Split at: ').grid(row=4, column=0) 
+		self.split_entry = Entry(self.left_frame)
+		self.split_entry.grid(row=5, column=0)
+		self.split_entry.insert(0, " ")
+	#Method works the buttons in the bottom.
+	def bottom_buttons(self):
+		self.start_button = Button(self.bottom_frame, text="Start", command=lambda: self.start_data())
+		self.start_button.grid(row=3, column=0)
+
+		self.pause_button = Button(self.bottom_frame, text="Pause", command=lambda: self.pause_data())
+		self.pause_button.grid(row=3, column=1)
+
+		self.stop_button = Button(self.bottom_frame, text="Stop", command=lambda: self.stop_data())
+		self.stop_button.grid(row=3, column=2)
+
+	## ********************* GUI initialization method **********************************###
+	 
+	def init_gui(self):
+		self.frame_creation()
+		self.text_widget()
+		self.left_widgets()
+		self.bottom_buttons()
+
+if __name__=="__main__":
+	root = Tk()
+	DataLogger(root)
+	root.mainloop()
+
