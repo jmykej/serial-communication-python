@@ -1,14 +1,13 @@
 """
-Beta 2.1
+Beta 2.3
 
 Want to add for this version:
     
-    Fix problem with program crash when data stream is sending wrong data.
+    
 
 Added to this version:
 
-    Seems fixed
-    Also fixed with the wrong amount of datapoints
+    Dont save data before starting. Right amount of points.
 
 Created on Mon Oct 14 10:00:49 2019
 
@@ -39,9 +38,13 @@ ws = wb.active      # Grab the active worksheet
 
 keep_measuring = True # Bool to keep program run for more measurements
 start_saving = False
-
+write = True
 
 #===============Functions================#
+
+def write_once():
+
+    ser.write('t'.encode())
 
 def measure(answer):
     
@@ -162,6 +165,12 @@ while True:
         
     clear = lambda: os.system('cls') #Clears the screen. At least on windows computer
     clear()
+
+    if write:
+
+        write_once()
+
+    write = False
     
     ##Welcome text. Tells you a little bit about the program.
 
